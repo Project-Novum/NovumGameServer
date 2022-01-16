@@ -76,8 +76,9 @@ public class PacketAsync
             
             return true;
         }
-        catch
+        catch(Exception ex)
         {
+            _logger.LogError($"Failed to read packet for error: {ex}");
             _logger.LogWarning(
                 "An error occurred attempting to read data from the client. It may not be important, but, still...");
             return false;
@@ -131,6 +132,14 @@ public class PacketAsync
             offset += 0x10; // skipping the subpacket header
             blowfish.Encipher(_data,offset,subPacket.PacketSizeWithoutHeader); //encrypting the subpacket data
             offset += subPacket.PacketSizeWithoutHeader; // advance to the next subpacket
+        }
+    }
+
+    public void DecryptPacket(Blowfish blowfish)
+    {
+        foreach (var subPacket in _subPacketList)
+        {
+            subPacket.DecryptData(blowfish);
         }
     }
 

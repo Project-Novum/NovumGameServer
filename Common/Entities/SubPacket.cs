@@ -62,6 +62,21 @@ public class SubPacket
         return true;
     }
 
+    public bool DecryptData(Blowfish blowfish)
+    {
+        if (_type == SubPacketType.GAME_PACKET)
+        {
+            blowfish.Decipher(_data, 0, _packetSizeWithoutHeader);
+
+            _gamePacket = _provider.GetRequiredService<GamePacket>();
+            if (!_gamePacket.ReadGamePacket(_data))
+            {
+                _logger.LogWarning("Error Reading Game Packet");
+            }
+        }
+
+        return true;
+    }
 
     public byte[] Header
     {

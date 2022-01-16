@@ -74,6 +74,6 @@ public class GamePacket
 
     public override string ToString()
     {
-        return $"{nameof(Unk1)}: {Unk1}, {nameof(Opcode)}: {Opcode}, {nameof(Unk2)}: {Unk2}, {nameof(Timestamp)}: {Timestamp}, {nameof(Unk3)}: {Unk3}";
+        return $"{nameof(Unk1)}: {Unk1}, {nameof(Opcode)}: {Opcode:x2}, {nameof(Unk2)}: {Unk2}, {nameof(Timestamp)}: {Timestamp}, {nameof(Unk3)}: {Unk3}";
     }
 }

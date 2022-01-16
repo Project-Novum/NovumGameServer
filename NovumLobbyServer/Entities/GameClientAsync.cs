@@ -80,20 +80,19 @@ public class GameClientAsync
 
     private async Task InternalConnectionLoop(CancellationToken token)
     {
-        int tickRate = 30; //Convert.ToInt32(simpleConfiguration.Get("tick", "30"));
+        const int tickRate = 30; //Convert.ToInt32(simpleConfiguration.Get("tick", "30"));
 
-        using (token.Register(() =>
-               {
-                   _logger.LogTrace("Client #{@_clientId} has been closed safely", _clientId);
-                   _tcpClient.Close();
-                   OnGameClientDisconnected?.Invoke(this, EventArgs.Empty);
-               }))
+        await using (token.Register(() =>
+                     {
+                         _logger.LogTrace("Client #{@_clientId} has been closed safely", _clientId);
+                         _tcpClient.Close();
+                         OnGameClientDisconnected?.Invoke(this, EventArgs.Empty);
+                     }))
         {
             while (!token.IsCancellationRequested)
             {
                 var packet = _provider.GetRequiredService<PacketAsync>();
                 
-
                 try
                 {
                     var readResult = await packet.ReadPacketAsync(_networkStream);
@@ -114,15 +113,14 @@ public class GameClientAsync
                 {
                     _logger.LogError(ode,
                         $"The {nameof(GameClientAsync)} was told to shutdown or threw some sort of error; cleaning up the Client");
-                    if (!token.IsCancellationRequested)
-                    {
-                        _tokenSource.Cancel();
-                    }
+
+                    _tokenSource.Cancel();
                 }
                 catch (ArgumentException argException)
                 {
                     _logger.LogError(argException,
                         $"The {nameof(GameClientAsync)} has thrown an error that more than likely involves communicating back to the Client");
+                    
                     _tokenSource.Cancel();
                 }
                 catch (InvalidOperationException ioe)
@@ -137,21 +135,20 @@ public class GameClientAsync
                     // exception, or otherwise rethrow the original exception.
                     _logger.LogError(ioe,
                         $"The {nameof(GameClientAsync)} was told to shutdown, or errored, before an incoming packet was read. More context is necessary to see if this Error can be safely ignored");
-                    if (token.IsCancellationRequested)
-                    {
-                        _logger.LogError(ioe,
-                            $"The {nameof(GameClientAsync)} was told to shutdown via the cancellation token. This error can more than likely be discarded.");
-                    }
-                    else
-                    {
-                        _logger.LogError(ioe,
-                            $"The {nameof(GameClientAsync)} was not told to shutdown. Please present this log to someone to investigate what went wrong while executing the code");
-                    }
+                    
+                    _logger.LogError(ioe,
+                        token.IsCancellationRequested
+                            ? $"The {nameof(GameClientAsync)} was told to shutdown via the cancellation token. This error can more than likely be discarded."
+                            : $"The {nameof(GameClientAsync)} was not told to shutdown. Please present this log to someone to investigate what went wrong while executing the code");
+                    
+                    _tokenSource.Cancel();
                 }
                 catch (Exception hipException)
                 {
                     _logger.LogError(hipException,
                         $"Client #{_clientId} has thrown an error parsing a particular packet. Dumping out the contents for later inspection");
+                    
+                    _tokenSource.Cancel();
                     /*_logger.LogData(packet.Data, packet.Code, (int)clientIndex, "", packet.ChecksumInPacket,
                         packet.ChecksumOfPacket);*/
                 }
@@ -161,7 +158,6 @@ public class GameClientAsync
 
     private async Task HandleIncomingBasePacketAsync(PacketAsync packetAsync)
     {
-        _logger.LogInformation(packetAsync.ToString());
 
         if (packetAsync.ConnectionType == PacketConnectionType.INITIAL_HANDSHAKE)
         {
@@ -171,7 +167,13 @@ public class GameClientAsync
             response.EncryptPacket(_blowfish);
 
             await SendPacket(response);
+            return;
+        }
+        else
+        {
+            packetAsync.DecryptPacket(_blowfish);
 
+            _logger.LogInformation(packetAsync.ToString());
         }
     }
 

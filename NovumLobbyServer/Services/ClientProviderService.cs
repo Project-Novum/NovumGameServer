@@ -12,13 +12,10 @@ public class ClientProviderService : IClientProviderService
 {
     private readonly ILogger<ClientProviderService> _logger;
     private readonly List<GameClientAsync> _clients;
-    
     private readonly IServiceProvider _provider;
-    
-    
-    
+
     public string ServiceName => "Game Client Service";
-    public ServiceStatusEnum ServiceStatus { get; private set; }
+    public ServiceStatusEnum ServiceStatus { get; }
     
     public ReadOnlyCollection<GameClientAsync> Clients => _clients.AsReadOnly();
 
@@ -36,8 +33,7 @@ public class ClientProviderService : IClientProviderService
 
     public void AddClient(TcpClient client, uint clientId)
     {
-        
-        GameClientAsync gameClient = _provider.GetRequiredService<GameClientAsync>();
+        GameClientAsync gameClient = ActivatorUtilities.CreateInstance<GameClientAsync>(_provider);
         gameClient.InitializeClient(clientId, client);
         AddClient(gameClient);
     }
@@ -45,7 +41,10 @@ public class ClientProviderService : IClientProviderService
     public void AddClient(GameClientAsync gameClient)
     {
         _logger.LogInformation($"Client {gameClient.ClientId} has connected");
-        _clients.Add(gameClient);
+
+        lock(_clients)
+            _clients.Add(gameClient);
+
         _logger.LogInformation($"There are {_clients.Count} connected clients");
         gameClient.OnGameClientDisconnected += Client_OnGameClientDisconnected;
     }
@@ -56,29 +55,29 @@ public class ClientProviderService : IClientProviderService
     public void RemoveClient(GameClientAsync gameClient)
     {
         _logger.LogInformation($"Client {gameClient.ClientId} is disconnecting");
-        _clients.Remove(gameClient);
+
+        lock(_clients)
+            _clients.Remove(gameClient);
+
         _logger.LogInformation($"There are {_clients.Count} connected clients");
     }
 
     public bool TryGetClient(uint index, out GameClientAsync gameClient)
     {
         gameClient = null;
-        foreach (var c in _clients)
+        foreach (var c in _clients.Where(c => c.ClientId == index))
         {
-            if (c.ClientId == index)
-            {
-                gameClient = c;
-                return true;
-            }
+            gameClient = c;
+            return true;
         }
         return false;
     }
     
     private void Client_OnGameClientDisconnected(object sender, EventArgs e)
     {
-        if (!(sender is GameClientAsync client)) return;
+        if (sender is not GameClientAsync client) return;
+
         RemoveClient(client);
-        
         client.OnGameClientDisconnected -= Client_OnGameClientDisconnected;
     }
 }

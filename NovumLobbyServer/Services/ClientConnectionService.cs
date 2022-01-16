@@ -63,7 +63,7 @@ public class ClientConnectionService : IClientConnectionService
     {
         // Don't restart if we're already running
         // or if the last known IP address is null
-        if (this.ServiceStatus == ServiceStatusEnum.Active)
+        if (ServiceStatus == ServiceStatusEnum.Active)
         {
             throw new NotSupportedException(
                 "As ironic as it seems, you cannot currently restart the service while it is running");
@@ -80,33 +80,30 @@ public class ClientConnectionService : IClientConnectionService
         _logger.LogInformation($"The {nameof(ClientConnectionService)} has been restarted");
     }
 
-    private async Task TEST()
-    {
-        _logger.LogInformation("TEST IS CALLED");
-    }
-
     private async Task InternalConnectionLoop(CancellationToken token)
     {
         _logger.LogInformation("Loop Started");
         _listener.Start();
         uint clientIds = 1;
-        using (token.Register(() =>
-               {
-                   this.ServiceStatus = ServiceStatusEnum.Inactive;
-                   _listener.Stop();
-                   _listener = null;
-               }))
+        await using (token.Register(() =>
+                     {
+                         ServiceStatus = ServiceStatusEnum.Inactive;
+                         _listener.Stop();
+                         _listener = null;
+                     }))
         {
-            this.ServiceStatus = ServiceStatusEnum.Active;
+            ServiceStatus = ServiceStatusEnum.Active;
             while (!token.IsCancellationRequested)
             {
                 try
                 {
                     _logger.LogTrace("Invoking AcceptTcpClientAsync()");
-                    TcpClient incomingConnection = await _listener.AcceptTcpClientAsync();
+                    TcpClient incomingConnection = await _listener.AcceptTcpClientAsync(token);
+
                     _logger.LogTrace(
                         $"AcceptTcpClientAsync() has returned with a client, migrating to {nameof(IClientProviderService)}");
                     clientProviderService.AddClient(incomingConnection, clientIds++);
+
                     _logger.LogTrace("Client Provider Service now has the client");
                 }
                 catch (ObjectDisposedException ode)
@@ -126,15 +123,11 @@ public class ClientConnectionService : IClientConnectionService
                     // exception, or otherwise rethrow the original exception.
                     _logger.LogError(ioe,
                         $"The {nameof(ClientConnectionService)} was told to shutdown, or errored, before an incoming connection attempt was made. More context is necessary to see if this Error can be safely ignored");
-                    if (token.IsCancellationRequested)
-                    {
-                        _logger.LogError(ioe, $"The {nameof(ClientConnectionService)} was told to shutdown.");
-                    }
-                    else
-                    {
-                        _logger.LogError(ioe,
-                            $"The {nameof(ClientConnectionService)} was not told to shutdown. Please present this log to someone to investigate what went wrong while executing the code");
-                    }
+                    
+                    _logger.LogError(ioe,
+                        token.IsCancellationRequested
+                            ? $"The {nameof(ClientConnectionService)} was told to shutdown."
+                            : $"The {nameof(ClientConnectionService)} was not told to shutdown. Please present this log to someone to investigate what went wrong while executing the code");
                 }
                 catch (OperationCanceledException oce)
                 {
@@ -143,7 +136,7 @@ public class ClientConnectionService : IClientConnectionService
                 }
             }
 
-            this.ServiceStatus = ServiceStatusEnum.Inactive;
+            ServiceStatus = ServiceStatusEnum.Inactive;
         }
     }
 }

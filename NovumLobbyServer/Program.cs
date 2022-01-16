@@ -18,8 +18,6 @@ namespace NovumLobbyServer
             var server = provider.GetRequiredService<Server>();
             
             server.Start();
-            
-
         }
 
         private static IServiceCollection InitializeContainer()
@@ -27,9 +25,8 @@ namespace NovumLobbyServer
            
             return new ServiceCollection().AddLogging(cfg => cfg
                     .AddConsole())
-                .AddSingleton<IClientProviderService,ClientProviderService>()
-                .AddSingleton<IClientConnectionService,ClientConnectionService>()
-                .AddTransient<GameClientAsync>()
+                .AddSingleton<IClientProviderService, ClientProviderService>()
+                .AddSingleton<IClientConnectionService, ClientConnectionService>()
                 .AddTransient<PacketAsync>()
                 .AddTransient<SubPacket>()
                 .AddTransient<GamePacket>()
