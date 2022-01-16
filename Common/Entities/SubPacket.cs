@@ -52,9 +52,13 @@ public class SubPacket
 
         _data = data;
         _packetSize = (ushort)(0x10 + data.Length);
+        _packetSizeWithoutHeader -= 0x10;
 
         if (Opcode == (ushort)SubPacketType.GAME_PACKET)
+        {
             _packetSize += 0x10;
+            _packetSizeWithoutHeader -= 0x10;
+        }
 
         return true;
     }
