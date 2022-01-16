@@ -1,7 +1,6 @@
 ﻿using System.Net;
 using System.Net.Sockets;
 using Common.Enumerations;
-using Microsoft.Extensions.Logging;
 
 using NovumLobbyServer.Services.Interface;
 
@@ -10,13 +9,11 @@ namespace NovumLobbyServer.Services;
 public class ClientConnectionService : IClientConnectionService
 {
     private readonly ILogger<ClientConnectionService> _logger;
-    private readonly IClientProviderService clientProviderService;
+    private readonly IClientProviderService _clientProviderService;
 
 
     private TcpListener _listener;
-    private CancellationTokenSource _tokenSource;
-    private IPAddress _lastIpAddress;
-    private ushort _lastPort;
+    private CancellationToken _cancellationToken;
 
     public string ServiceName => "Client Connection Service";
 
@@ -27,16 +24,16 @@ public class ClientConnectionService : IClientConnectionService
         IClientProviderService clientProviderService)
     {
         _logger = logger;
-        this.clientProviderService = clientProviderService;
+        _clientProviderService = clientProviderService;
     }
 
-    public void BeginListening(string ipAddress, ushort port)
+    public async Task BeginListening(string ipAddress, ushort port, CancellationToken cancellationToken)
     {
         if (!IPAddress.TryParse(ipAddress, out var ip)) throw new ArgumentException(nameof(ipAddress));
-        this.BeginListening(ip, port);
+        await BeginListening(ip!, port, cancellationToken);
     }
 
-    public void BeginListening(IPAddress ipAddress, ushort port)
+    public async Task BeginListening(IPAddress ipAddress, ushort port, CancellationToken cancellationToken)
     {
         if (_listener != null)
         {
@@ -44,99 +41,71 @@ public class ClientConnectionService : IClientConnectionService
         }
 
         _logger.LogInformation("Opening TCP Listener on {@ipAddress}:{@port}", ipAddress.ToString(), port);
-        _tokenSource = new CancellationTokenSource();
+        _cancellationToken = cancellationToken;
         _listener = new TcpListener(ipAddress, port);
-        var t= Task.Run(async () => await InternalConnectionLoop(_tokenSource.Token));
-        _lastIpAddress = ipAddress;
-        _lastPort = port;
-        t.Wait();
+
+        await InternalConnectionLoop();
     }
 
     public void EndListening()
     {
         _logger.LogInformation($"The {nameof(ClientConnectionService)} has had a shutdown requested");
-        _tokenSource.Cancel();
-        _logger.LogInformation($"A cancellation request has been submitted");
+
+        ServiceStatus = ServiceStatusEnum.Inactive;
+        _listener.Stop();
+
+        _logger.LogInformation($"{nameof(ClientConnectionService)} has been shutdown and all clients **saved**!");
     }
 
-    public void RestartService()
+    private async Task InternalConnectionLoop()
     {
-        // Don't restart if we're already running
-        // or if the last known IP address is null
-        if (ServiceStatus == ServiceStatusEnum.Active)
-        {
-            throw new NotSupportedException(
-                "As ironic as it seems, you cannot currently restart the service while it is running");
-        }
-
-        if (_lastIpAddress is null)
-        {
-            throw new InvalidOperationException(
-                "The service has not been run before and has no last known IP address to re-bind to");
-        }
-
-        _logger.LogInformation($"The {nameof(ClientConnectionService)} is being restarted...");
-        BeginListening(_lastIpAddress, _lastPort);
-        _logger.LogInformation($"The {nameof(ClientConnectionService)} has been restarted");
-    }
-
-    private async Task InternalConnectionLoop(CancellationToken token)
-    {
-        _logger.LogInformation("Loop Started");
+        _logger.LogInformation("Game lobby loop has started up");
         _listener.Start();
         uint clientIds = 1;
-        await using (token.Register(() =>
-                     {
-                         ServiceStatus = ServiceStatusEnum.Inactive;
-                         _listener.Stop();
-                         _listener = null;
-                     }))
+        ServiceStatus = ServiceStatusEnum.Active;
+        while (!_cancellationToken.IsCancellationRequested)
         {
-            ServiceStatus = ServiceStatusEnum.Active;
-            while (!token.IsCancellationRequested)
+            try
             {
-                try
-                {
-                    _logger.LogTrace("Invoking AcceptTcpClientAsync()");
-                    TcpClient incomingConnection = await _listener.AcceptTcpClientAsync(token);
+                _logger.LogTrace("Invoking AcceptTcpClientAsync()");
+                TcpClient incomingConnection = await _listener.AcceptTcpClientAsync(_cancellationToken);
 
-                    _logger.LogTrace(
-                        $"AcceptTcpClientAsync() has returned with a client, migrating to {nameof(IClientProviderService)}");
-                    clientProviderService.AddClient(incomingConnection, clientIds++);
+                _logger.LogTrace(
+                    $"AcceptTcpClientAsync() has returned with a client, migrating to {nameof(IClientProviderService)}");
+                _clientProviderService.AddClient(incomingConnection, clientIds++);
 
-                    _logger.LogTrace("Client Provider Service now has the client");
-                }
-                catch (ObjectDisposedException ode)
-                {
-                    _logger.LogError(ode,
-                        "The service was told to shutdown, or errored, after an incoming connection attempt was made. It is probably safe to ignore this Error as the listener is already shutting down");
-                }
-                catch (InvalidOperationException ioe)
-                {
-                    // Either tcpListener.Start wasn't called (a bug!)
-                    // or the CancellationToken was cancelled before
-                    // we started accepting (giving an InvalidOperationException),
-                    // or the CancellationToken was cancelled after
-                    // we started accepting (giving an ObjectDisposedException).
-                    //
-                    // In the latter two cases we should surface the cancellation
-                    // exception, or otherwise rethrow the original exception.
-                    _logger.LogError(ioe,
-                        $"The {nameof(ClientConnectionService)} was told to shutdown, or errored, before an incoming connection attempt was made. More context is necessary to see if this Error can be safely ignored");
-                    
-                    _logger.LogError(ioe,
-                        token.IsCancellationRequested
-                            ? $"The {nameof(ClientConnectionService)} was told to shutdown."
-                            : $"The {nameof(ClientConnectionService)} was not told to shutdown. Please present this log to someone to investigate what went wrong while executing the code");
-                }
-                catch (OperationCanceledException oce)
-                {
-                    _logger.LogError(oce,
-                        $"The {nameof(ClientConnectionService)} was told to explicitly shutdown and no further action is necessary");
-                }
+                _logger.LogTrace("Client Provider Service now has the client");
             }
+            catch (ObjectDisposedException ode)
+            {
+                _logger.LogError(ode,
+                    "The service was told to shutdown, or errored, after an incoming connection attempt was made. It is probably safe to ignore this Error as the listener is already shutting down");
+            }
+            catch (InvalidOperationException ioe)
+            {
+                // Either tcpListener.Start wasn't called (a bug!)
+                // or the CancellationToken was cancelled before
+                // we started accepting (giving an InvalidOperationException),
+                // or the CancellationToken was cancelled after
+                // we started accepting (giving an ObjectDisposedException).
+                //
+                // In the latter two cases we should surface the cancellation
+                // exception, or otherwise rethrow the original exception.
+                _logger.LogError(ioe,
+                    $"The {nameof(ClientConnectionService)} was told to shutdown, or errored, before an incoming connection attempt was made. More context is necessary to see if this Error can be safely ignored");
 
-            ServiceStatus = ServiceStatusEnum.Inactive;
+                _logger.LogError(ioe,
+                    _cancellationToken.IsCancellationRequested
+                        ? $"The {nameof(ClientConnectionService)} was told to shutdown."
+                        : $"The {nameof(ClientConnectionService)} was not told to shutdown. Please present this log to someone to investigate what went wrong while executing the code");
+            }
+            catch (OperationCanceledException oce)
+            {
+                _logger.LogWarning(oce,
+                    $"The {nameof(ClientConnectionService)} was told to explicitly shutdown and no further action is necessary");
+            }
         }
+
+        EndListening();
     }
 }

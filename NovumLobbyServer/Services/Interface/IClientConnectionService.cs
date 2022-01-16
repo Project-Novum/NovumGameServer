@@ -18,17 +18,18 @@ public interface IClientConnectionService : IBaseService
     /// <remarks>
     /// <see cref="IClientConnectionService"/> can accept a single <see cref="BeginListening(string, ushort)"/> at a time. Subsequent calls to this method will basically not work
     /// </remarks>
-    void BeginListening(string ipAddress, ushort port);
+    Task BeginListening(string ipAddress, ushort port, CancellationToken cancellationToken);
 
     /// <summary>
     /// Activates <see cref="IClientConnectionService"/> and allows for connections
     /// </summary>
     /// <param name="ipAddress">The IP address the service should bind to</param>
     /// <param name="port">The port number to listen on</param>
+    /// <param name="cancellationToken"></param>
     /// <remarks>
     /// <see cref="IClientConnectionService"/> can accept a single <see cref="BeginListening(string, ushort)"/> at a time. Subsequent calls to this method will basically not work
     /// </remarks>
-    void BeginListening(IPAddress ipAddress, ushort port);
+    Task BeginListening(IPAddress ipAddress, ushort port, CancellationToken cancellationToken);
 
     /// <summary>
     /// Disables <see cref="IClientConnectionService"/> and no longer accepts more connections
@@ -37,12 +38,4 @@ public interface IClientConnectionService : IBaseService
     /// As a programmer note, this is more like disabling a 'login' server rather than shutting down existing connections
     /// </remarks>
     void EndListening();
-
-    /// <summary>
-    /// Restarts <see cref="IClientConnectionService"/> in the event that it was shutdown
-    /// </summary>
-    /// <remarks>
-    /// This method will do nothing if the system is still running properly
-    /// </remarks>
-    void RestartService();
 }

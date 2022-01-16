@@ -1,16 +1,15 @@
 ﻿using System.Net;
-using Microsoft.Extensions.Logging;
 using NovumLobbyServer.Services.Interface;
 
 namespace NovumLobbyServer;
 
-public class Server
+public class Server : BackgroundService
 {
     private readonly ILogger<Server> _logger;
     
     private readonly IPAddress _ipAddress;
     private readonly ushort _port;
-    private readonly IClientConnectionService clientConnectionService;
+    private readonly IClientConnectionService _clientConnectionService;
 
     public Server(ILogger<Server> logger, IClientConnectionService clientConnectionService)
     {
@@ -19,13 +18,11 @@ public class Server
         IPAddress.TryParse("0.0.0.0", out _ipAddress);
         ushort.TryParse("54994", out _port);
         
-        this.clientConnectionService = clientConnectionService;
+        _clientConnectionService = clientConnectionService;
     }
 
-    public void Start()
+    protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        
-        clientConnectionService.BeginListening(_ipAddress,_port);
-        
+        return _clientConnectionService.BeginListening(_ipAddress, _port, stoppingToken);
     }
 }

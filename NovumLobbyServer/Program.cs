@@ -1,37 +1,33 @@
 ﻿
 using Common.Entities;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using NovumLobbyServer.Entities;
+using Database;
+using Microsoft.EntityFrameworkCore;
+using NovumLobbyServer;
 using NovumLobbyServer.Services;
 using NovumLobbyServer.Services.Interface;
 
-namespace NovumLobbyServer
-{
-    class Program
-    { 
-        private static void Main(string[] args)
-        {
-            var serviceCollection = InitializeContainer();
-            var provider = serviceCollection.BuildServiceProvider();
+var host = Host.CreateDefaultBuilder(args)
+    .ConfigureAppConfiguration(x =>
+    {
+        x.SetBasePath(Directory.GetCurrentDirectory());
+        x.AddJsonFile("appsettings.json", optional: true);
+        x.AddEnvironmentVariables();
+        x.AddCommandLine(args);
+    })
+    .ConfigureServices((hostingContext, services) =>
+    {
+        services.AddSingleton<IClientProviderService, ClientProviderService>()
+            .AddSingleton<IClientConnectionService, ClientConnectionService>()
+            .AddDbContextPool<DBContext>(x => 
+                x.UseMySQL(hostingContext.Configuration.GetConnectionString("DefaultConnection")))
+            .AddTransient<PacketAsync>()
+            .AddTransient<SubPacket>()
+            .AddTransient<GamePacket>()
+            .AddHostedService<Server>();
+    })
+    .ConfigureLogging((hostingContext, logging) => {
+        logging.AddConfiguration(hostingContext.Configuration.GetSection("Logging"));
+        logging.AddConsole();
+    }); ;
 
-            var server = provider.GetRequiredService<Server>();
-            
-            server.Start();
-        }
-
-        private static IServiceCollection InitializeContainer()
-        {
-           
-            return new ServiceCollection().AddLogging(cfg => cfg
-                    .AddConsole())
-                .AddSingleton<IClientProviderService, ClientProviderService>()
-                .AddSingleton<IClientConnectionService, ClientConnectionService>()
-                .AddTransient<PacketAsync>()
-                .AddTransient<SubPacket>()
-                .AddTransient<GamePacket>()
-                .AddSingleton<Server>();
-            
-        }
-    }
-}
+ await host.RunConsoleAsync();
