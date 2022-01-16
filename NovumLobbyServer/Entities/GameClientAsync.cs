@@ -7,6 +7,7 @@ using Common.Entities;
 using Common.Enumerations;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using NovumLobbyServer.Packets.Receive;
 
 
 namespace NovumLobbyServer.Entities;
@@ -169,12 +170,29 @@ public class GameClientAsync
             await SendPacket(response);
             return;
         }
-        else
-        {
-            packetAsync.DecryptPacket(_blowfish);
 
-            _logger.LogInformation(packetAsync.ToString());
+        packetAsync.DecryptPacket(_blowfish);
+
+        _logger.LogInformation(packetAsync.ToString());
+
+        foreach (var packet in packetAsync.SubPacketList)
+        {
+            if (packet.Type == SubPacketType.GAME_PACKET)
+            {
+                switch (packet.GamePacket.Opcode)
+                {
+                    case 0x05:
+                        await ProcessSessionAcknowledgement(packet);
+                        break;
+                }
+            }
         }
+    }
+
+    private async Task ProcessSessionAcknowledgement(SubPacket packet)
+    {
+        SessionPacket session = new SessionPacket(packet);
+        _logger.LogInformation(session.ToString());
     }
 
     private async void PingTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)

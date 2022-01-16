@@ -86,7 +86,13 @@ public class SubPacket
 
     public byte[] Data
     {
-        get => _data;
+        get
+        {
+            if (_type == SubPacketType.GAME_PACKET)
+                return _data.Skip(0x10).ToArray();
+            return _data;
+        }
+
         set => _data = value;
     }
 
