@@ -205,7 +205,7 @@ public class PacketAsync
 
     public override string ToString()
     {
-        return $"{nameof(IsAuthenticated)}: {IsAuthenticated}, {nameof(IsCompressed)}: {IsCompressed}, {nameof(ConnectionType)}: {Enum.GetName(ConnectionType)}, {nameof(PacketSize)}: {PacketSize}, {nameof(PacketSizeWithoutHeader)}: {PacketSizeWithoutHeader}, {nameof(Timestamp)}: {Timestamp}, {nameof(NumberOfSubPackets)}: {NumberOfSubPackets}, {nameof(SubPacketList)}: {SubPacketListToString()}";
+        return $"{nameof(IsAuthenticated)}: {IsAuthenticated}, {nameof(IsCompressed)}: {IsCompressed}, {nameof(ConnectionType)}: {Enum.GetName(ConnectionType)} (0x{ConnectionType:X}), {nameof(PacketSize)}: {PacketSize}, {nameof(PacketSizeWithoutHeader)}: {PacketSizeWithoutHeader}, {nameof(Timestamp)}: {Timestamp}, {nameof(NumberOfSubPackets)}: {NumberOfSubPackets}, {nameof(SubPacketList)}: {SubPacketListToString()}";
     }
 
     private string SubPacketListToString()
