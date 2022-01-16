@@ -32,4 +32,9 @@ public class SessionPacket : Packet
             InvalidPacket = true;
         }
     }
+
+    public override byte[] Create()
+    {
+        throw new NotImplementedException();
+    }
 }

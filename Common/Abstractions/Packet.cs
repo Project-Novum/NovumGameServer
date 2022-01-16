@@ -4,17 +4,11 @@ namespace Common.Abstractions;
 
 public abstract class Packet
 {
-    protected readonly byte[] Data;
-
-    protected Packet(SubPacket packet) : this(packet.Data)
-    {
-
-    }
-
     protected Packet(byte[] data)
     {
-        Data = data;
     }
+
+    public abstract byte[] Create();
 
     public override string ToString()
     {
