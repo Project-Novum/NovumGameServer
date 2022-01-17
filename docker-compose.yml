@@ -7,7 +7,7 @@ x-common-postgres: &common
 
 services:
   novumlogin:
-    image: ghcr.io/project-novum/novumloginserver/novumlogin:latest
+    image: ghcr.io/project-novum/novumloginserver/novumlogin:develop
     environment:
         <<: *common
     ports:

@@ -8,6 +8,7 @@ namespace Common.Entities;
 
 public class PacketAsync
 {
+    private const int BasePacketSize = 0x10;
     private readonly ILogger<PacketAsync> _logger;
     private readonly IServiceProvider _provider;
     private byte[] _header;
@@ -119,6 +120,37 @@ public class PacketAsync
             }
             _subPacketList.Add(subPacket);
         }
+
+        return true;
+    }
+
+    public bool BuildPacket(bool isAuthed, bool isCompressed)
+    {
+        _isAuthenticated = isAuthed;
+        _isCompressed = isCompressed;
+        _connectionType = 0x00;
+        _numberOfSubPackets = (ushort)_subPacketList.Count;
+        _packetSize = BasePacketSize;
+        _timestamp = Utils.MilisUnixTimeStampUTC();
+
+        using MemoryStream subPacketData = new MemoryStream();
+        
+        foreach (var subPacket in _subPacketList)
+        {
+            _packetSize += subPacket.PacketSize;
+            subPacketData.Write(subPacket.Header);
+            subPacketData.Write(subPacket.Data);
+        }
+        
+        using MemoryStream memoryStream = new MemoryStream(); 
+        memoryStream.Write(BitConverter.GetBytes(_isAuthenticated));
+        memoryStream.Write(BitConverter.GetBytes(_isCompressed));
+        memoryStream.Write(BitConverter.GetBytes((ushort)_connectionType));
+        memoryStream.Write(BitConverter.GetBytes(_packetSize));
+        memoryStream.Write(BitConverter.GetBytes(_numberOfSubPackets));
+        memoryStream.Write(BitConverter.GetBytes(_timestamp));
+        memoryStream.Write(subPacketData.ToArray());
+        _data = memoryStream.ToArray();
 
         return true;
     }

@@ -28,7 +28,7 @@ var host = Host.CreateDefaultBuilder(args)
                 x.UseNpgsql(hostingContext.Configuration.GetConnectionString("DefaultConnection")))
             .AddTransient<PacketAsync>()
             .AddTransient<SubPacket>()
-            .AddTransient<GamePacket>()
+            .AddTransient<GamePacketAsync>()
             .AddHostedService<Server>();
     })
     .ConfigureLogging((hostingContext, logging) => {

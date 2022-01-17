@@ -10,6 +10,7 @@ using Common.Enumerations;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NovumLobbyServer.Packets.Receive;
+using NovumLobbyServer.Packets.Send;
 using StackExchange.Redis.Extensions.Core.Abstractions;
 
 
@@ -167,7 +168,7 @@ public class GameClientAsync
             PacketAsync response = _provider.GetRequiredService<PacketAsync>();
             response.WritePacket(HardCodedPacket.g_secureConnectionAcknowledgment);
             response.EncryptPacket(_blowfish);
-
+            _logger.LogInformation("Sent the Handshake");
             await SendPacket(response);
             return;
         }
@@ -180,7 +181,7 @@ public class GameClientAsync
         {
             if (packet.Type == SubPacketType.GAME_PACKET)
             {
-                switch (packet.GamePacket.Opcode)
+                switch (packet.GamePacketAsync.Opcode)
                 {
                     case 0x05:
                         await ProcessSessionAcknowledgement(packet);
@@ -202,6 +203,18 @@ public class GameClientAsync
 
         _logger.LogInformation("Found user id: {userId}", exist);
         _clientUserId = exist;
+        
+        AccountListPacket accountListPacket = AccountListPacket.CreateDefault();
+        SubPacket subPacket = ActivatorUtilities.CreateInstance<SubPacket>(_provider);
+        if (subPacket.Create(accountListPacket))
+        {
+            PacketAsync response = ActivatorUtilities.CreateInstance<PacketAsync>(_provider);
+            response.SubPacketList.Add(subPacket);
+            response.BuildPacket(true, false);
+            response.EncryptPacket(_blowfish);
+            _logger.LogInformation("Sending Account List {0}",accountListPacket.ToString());
+           await SendPacket(response);
+        }
     }
 
     private async void PingTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
@@ -213,6 +226,7 @@ public class GameClientAsync
 
     private async Task SendPacket(PacketAsync packetAsync)
     {
+        //_logger.LogInformation("Sending the following Packet {0}",ObjectDumper.Dump(packetAsync));
         await using MemoryStream responseStream = new MemoryStream();
         
         responseStream.Write(packetAsync.Header,0,0x10);

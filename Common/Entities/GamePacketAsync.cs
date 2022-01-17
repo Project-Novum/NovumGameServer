@@ -2,9 +2,9 @@
 
 namespace Common.Entities;
 
-public class GamePacket
+public class GamePacketAsync
 {
-    private readonly ILogger<GamePacket> _logger;
+    private readonly ILogger<GamePacketAsync> _logger;
 
     private byte[] _header;
 
@@ -14,7 +14,7 @@ public class GamePacket
     private uint _timestamp;
     private uint _unk3;
     
-    public GamePacket(ILogger<GamePacket> logger)
+    public GamePacketAsync(ILogger<GamePacketAsync> logger)
     {
         _logger = logger;
     }
@@ -34,6 +34,17 @@ public class GamePacket
 
         return true;
 
+    }
+
+    public void BuildHeader()
+    {
+        using MemoryStream headerStream = new MemoryStream();
+        headerStream.Write(BitConverter.GetBytes(_unk1));
+        headerStream.Write(BitConverter.GetBytes(_opcode));
+        headerStream.Write(BitConverter.GetBytes(_unk2));
+        headerStream.Write(BitConverter.GetBytes(_timestamp));
+        headerStream.Write(BitConverter.GetBytes(_unk3));
+        _header = headerStream.ToArray();
     }
 
     public byte[] Header

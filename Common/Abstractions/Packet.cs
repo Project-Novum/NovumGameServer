@@ -9,7 +9,7 @@ public abstract class Packet
     }
 
     public abstract byte[] Create();
-
+    
     public override string ToString()
     {
         return ObjectDumper.Dump(this);

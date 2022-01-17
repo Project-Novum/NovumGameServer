@@ -11,7 +11,7 @@ public class SubPacket
     private readonly IServiceProvider _provider;
     private byte[] _header;
     private byte[] _data;
-    private GamePacket _gamePacket;
+    private GamePacketAsync _gamePacketAsync;
 
     private ushort _packetSize;
     private ushort _packetSizeWithoutHeader;
@@ -27,38 +27,58 @@ public class SubPacket
 
     }
 
-    public bool Create(ushort Opcode, uint SourceId, Packet packet)
+    public bool Create(GamePacket gamePacket)
     {
-        return Create(Opcode, SourceId, packet.Create());
+        return Create((ushort)SubPacketType.GAME_PACKET, gamePacket.SourceId(), gamePacket.TargetId(), gamePacket.Create(),gamePacket.OpCode());
+    }
+
+    public bool Create(ushort PacketType, uint SourceId, Packet packet)
+    {
+        return Create(PacketType, SourceId, 0,packet.Create(),0);
     }
 
 
-    public bool Create(ushort Opcode, uint SourceId, byte[] data)
+    public bool Create(ushort PacketType, uint SourceId,uint TargetId ,byte[] data,ushort Opcode)
     {
-        if (Opcode == (ushort)SubPacketType.GAME_PACKET)
+        using MemoryStream memoryStream = new MemoryStream();
+        
+        if (PacketType == (ushort)SubPacketType.GAME_PACKET)
         {
-            _gamePacket = ActivatorUtilities.CreateInstance<GamePacket>(_provider);
-            _gamePacket.Opcode = Opcode;
-            _gamePacket.Timestamp = (uint)DateTimeOffset.Now.ToUnixTimeSeconds();
-            _gamePacket.Unk1 = 0x14;
-            _gamePacket.Unk2 = 0x00;
-            _gamePacket.Unk3 = 0x00;
+            _gamePacketAsync = ActivatorUtilities.CreateInstance<GamePacketAsync>(_provider);
+            _gamePacketAsync.Unk1 = 0x14;
+            _gamePacketAsync.Opcode = Opcode;
+            _gamePacketAsync.Unk2 = UInt32.MinValue;
+            _gamePacketAsync.Timestamp = (uint)DateTimeOffset.Now.ToUnixTimeSeconds();
+            _gamePacketAsync.Unk3 = UInt32.MinValue;
+            _gamePacketAsync.BuildHeader();
+            memoryStream.Write(_gamePacketAsync.Header);
         }
+        memoryStream.Write(data);
+        _data = memoryStream.ToArray();
 
-        _type = (SubPacketType)Opcode;
+        _type = (SubPacketType)PacketType;
         _sourceId = SourceId;
-        _targetId = 0;
-        _unknown = 0x00;
+        _targetId = TargetId;
+        _unknown = UInt32.MinValue;
 
-        _data = data;
-        _packetSize = (ushort)(0x10 + data.Length);
-        _packetSizeWithoutHeader -= 0x10;
+        
+        _packetSize = (ushort)(0x10 + _data.Length);
+        _packetSizeWithoutHeader = (ushort)(_packetSize - 0x10);
 
-        if (Opcode == (ushort)SubPacketType.GAME_PACKET)
+        if (PacketType == (ushort)SubPacketType.GAME_PACKET)
         {
             _packetSize += 0x10;
-            _packetSizeWithoutHeader -= 0x10;
+            _packetSizeWithoutHeader += 0x10;
         }
+
+        using MemoryStream headerStream = new MemoryStream();
+        headerStream.Write(BitConverter.GetBytes(_packetSize));
+        headerStream.Write(BitConverter.GetBytes((ushort)_type));
+        headerStream.Write(BitConverter.GetBytes(_sourceId));
+        headerStream.Write(BitConverter.GetBytes(_targetId));
+        headerStream.Write(BitConverter.GetBytes(_unknown));
+        _header = headerStream.ToArray();
+        
 
         return true;
     }
@@ -84,8 +104,8 @@ public class SubPacket
         if (_type == SubPacketType.GAME_PACKET)
         {
             _packetSize += 0x10;
-            _gamePacket = _provider.GetRequiredService<GamePacket>();
-            if (!_gamePacket.ReadGamePacket(_data))
+            _gamePacketAsync = _provider.GetRequiredService<GamePacketAsync>();
+            if (!_gamePacketAsync.ReadGamePacket(_data))
             {
                 _logger.LogWarning("Error Reading Game Packet");
             }
@@ -103,8 +123,8 @@ public class SubPacket
         {
             blowfish.Decipher(_data, 0, _packetSizeWithoutHeader);
 
-            _gamePacket = _provider.GetRequiredService<GamePacket>();
-            if (!_gamePacket.ReadGamePacket(_data))
+            _gamePacketAsync = _provider.GetRequiredService<GamePacketAsync>();
+            if (!_gamePacketAsync.ReadGamePacket(_data))
             {
                 _logger.LogWarning("Error Reading Game Packet");
             }
@@ -129,10 +149,10 @@ public class SubPacket
         set => _data = value;
     }
 
-    public GamePacket GamePacket
+    public GamePacketAsync GamePacketAsync
     {
-        get => _gamePacket;
-        set => _gamePacket = value;
+        get => _gamePacketAsync;
+        set => _gamePacketAsync = value;
     }
 
     public ushort PacketSize
@@ -173,6 +193,6 @@ public class SubPacket
 
     public override string ToString()
     {
-        return $"{nameof(GamePacket)}: {GamePacket?.ToString()}, {nameof(PacketSize)}: {PacketSize}, {nameof(PacketSizeWithoutHeader)}: {PacketSizeWithoutHeader}, {nameof(Type)}: {Enum.GetName(Type)}, {nameof(SourceId)}: {SourceId}, {nameof(TargetId)}: {TargetId}, {nameof(Unknown)}: {Unknown}";
+        return $"{nameof(GamePacketAsync)}: {GamePacketAsync?.ToString()}, {nameof(PacketSize)}: {PacketSize}, {nameof(PacketSizeWithoutHeader)}: {PacketSizeWithoutHeader}, {nameof(Type)}: {Enum.GetName(Type)}, {nameof(SourceId)}: {SourceId}, {nameof(TargetId)}: {TargetId}, {nameof(Unknown)}: {Unknown}";
     }
 }

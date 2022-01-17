@@ -287,7 +287,7 @@ public class Blowfish
         public void Encipher(byte[] data, int offset, int length)
         {
             if ((length - offset) % 8 != 0)
-                throw new ArgumentException("Needs to be a multiple of 8");
+                throw new ArgumentException($"Needs to be a multiple of 8 , Recevied the value {length - offset}");
 
             for (int i = offset; i < offset + length; i += 8)
             {
