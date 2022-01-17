@@ -1,4 +1,6 @@
-﻿using System.Net;
+﻿using System.Diagnostics;
+using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -19,11 +21,11 @@ public class GameClientAsync
     private readonly TimeSpan _defaultPingTimeout;
     private readonly IServiceProvider _provider;
     private readonly IRedisDatabase _redis;
-    private CancellationTokenSource _tokenSource;
     private System.Timers.Timer _pingTimer;
 
     private uint _clientId;
     private string _clientSessionId;
+    private int _clientUserId;
 
     private NetworkStream _networkStream;
     private TcpClient _tcpClient;
@@ -69,9 +71,8 @@ public class GameClientAsync
         _networkStream.ReadTimeout = 100;
         _networkStream.WriteTimeout = 100;
         _ipEndPoint = (IPEndPoint)_tcpClient.Client.RemoteEndPoint;
-        _tokenSource = new CancellationTokenSource();
         _logger.LogTrace("Client #{@clientId} is connecting from {@_ipEndPoint}", clientId, _ipEndPoint);
-        Task.Run(async () => await InternalConnectionLoop(_tokenSource.Token));
+        Task.Run(async () => await InternalConnectionLoop());
 
         _pingTimer = new System.Timers.Timer(_defaultPingTimeout.TotalMilliseconds)
         {
@@ -81,82 +82,85 @@ public class GameClientAsync
         _pingTimer.Elapsed += PingTimer_Elapsed;
     }
 
-    private async Task InternalConnectionLoop(CancellationToken token)
+    private TcpState GetState()
+    {
+        var foo = IPGlobalProperties.GetIPGlobalProperties()
+            .GetActiveTcpConnections()
+            .SingleOrDefault(x => x.LocalEndPoint.Equals(_tcpClient.Client.LocalEndPoint));
+        return foo != null ? foo.State : TcpState.Unknown;
+    }
+
+    private async Task InternalConnectionLoop()
     {
         const int tickRate = 30; //Convert.ToInt32(simpleConfiguration.Get("tick", "30"));
 
-        await using (token.Register(() =>
-                     {
-                         _logger.LogTrace("Client #{@_clientId} has been closed safely", _clientId);
-                         _tcpClient.Close();
-                         OnGameClientDisconnected?.Invoke(this, EventArgs.Empty);
-                     }))
+        while (GetState() == TcpState.Established)
         {
-            while (!token.IsCancellationRequested)
+            var packet = _provider.GetRequiredService<PacketAsync>();
+
+            try
             {
-                var packet = _provider.GetRequiredService<PacketAsync>();
-                
-                try
-                {
-                    var readResult = await packet.ReadPacketAsync(_networkStream);
+                var readResult = await packet.ReadPacketAsync(_networkStream);
 
-                    if (!readResult)
-                    {
-                        _logger.LogTrace(
-                            "Client #{@_clientId} has no data at this time; suspending for {@tickRate} milliseconds",
-                            _clientId, tickRate);
-                        await Task.Delay(TimeSpan.FromMilliseconds(tickRate), token);
-                    }
-                    else
-                    {
-                        await HandleIncomingBasePacketAsync(packet);
-                    }
-                }
-                catch (ObjectDisposedException ode)
+                if (!readResult)
                 {
-                    _logger.LogError(ode,
-                        $"The {nameof(GameClientAsync)} was told to shutdown or threw some sort of error; cleaning up the Client");
-
-                    _tokenSource.Cancel();
+                    _logger.LogTrace(
+                        "Client #{@_clientId} has no data at this time; suspending for {@tickRate} milliseconds",
+                        _clientId, tickRate);
+                    await Task.Delay(TimeSpan.FromMilliseconds(tickRate));
                 }
-                catch (ArgumentException argException)
+                else
                 {
-                    _logger.LogError(argException,
-                        $"The {nameof(GameClientAsync)} has thrown an error that more than likely involves communicating back to the Client");
-                    
-                    _tokenSource.Cancel();
-                }
-                catch (InvalidOperationException ioe)
-                {
-                    // Either tcpListener.Start wasn't called (a bug!)
-                    // or the CancellationToken was cancelled before
-                    // we started accepting (giving an InvalidOperationException),
-                    // or the CancellationToken was cancelled after
-                    // we started accepting (giving an ObjectDisposedException).
-                    //
-                    // In the latter two cases we should surface the cancellation
-                    // exception, or otherwise rethrow the original exception.
-                    _logger.LogError(ioe,
-                        $"The {nameof(GameClientAsync)} was told to shutdown, or errored, before an incoming packet was read. More context is necessary to see if this Error can be safely ignored");
-                    
-                    _logger.LogError(ioe,
-                        token.IsCancellationRequested
-                            ? $"The {nameof(GameClientAsync)} was told to shutdown via the cancellation token. This error can more than likely be discarded."
-                            : $"The {nameof(GameClientAsync)} was not told to shutdown. Please present this log to someone to investigate what went wrong while executing the code");
-                    
-                    _tokenSource.Cancel();
-                }
-                catch (Exception hipException)
-                {
-                    _logger.LogError(hipException,
-                        $"Client #{_clientId} has thrown an error parsing a particular packet. Dumping out the contents for later inspection");
-                    
-                    _tokenSource.Cancel();
-                    /*_logger.LogData(packet.Data, packet.Code, (int)clientIndex, "", packet.ChecksumInPacket,
-                        packet.ChecksumOfPacket);*/
+                    await HandleIncomingBasePacketAsync(packet);
                 }
             }
+            catch (ObjectDisposedException ode)
+            {
+                _logger.LogError(ode,
+                    $"The {nameof(GameClientAsync)} was told to shutdown or threw some sort of error; cleaning up the Client");
+
+                break;
+            }
+            catch (ArgumentException argException)
+            {
+                _logger.LogError(argException,
+                    $"The {nameof(GameClientAsync)} has thrown an error that more than likely involves communicating back to the Client");
+
+                break;
+            }
+            catch (InvalidOperationException ioe)
+            {
+                // Either tcpListener.Start wasn't called (a bug!)
+                // or the CancellationToken was cancelled before
+                // we started accepting (giving an InvalidOperationException),
+                // or the CancellationToken was cancelled after
+                // we started accepting (giving an ObjectDisposedException).
+                //
+                // In the latter two cases we should surface the cancellation
+                // exception, or otherwise rethrow the original exception.
+                _logger.LogError(ioe,
+                    $"The {nameof(GameClientAsync)} was told to shutdown, or errored, before an incoming packet was read. More context is necessary to see if this Error can be safely ignored");
+
+
+                break;
+            }
+            catch (Exception hipException)
+            {
+                _logger.LogError(hipException,
+                    $"Client #{_clientId} has thrown an error parsing a particular packet. Dumping out the contents for later inspection");
+                break;
+            }
         }
+        
+        _logger.LogTrace("Client #{@_clientId} has been closed safely", _clientId);
+        _tcpClient.Close();
+        _pingTimer.Stop();
+
+        // Delete the session from redis so it can't be reused
+        if(!string.IsNullOrEmpty(_clientSessionId))
+            await _redis.RemoveAsync(_clientSessionId);
+
+        OnGameClientDisconnected?.Invoke(this, EventArgs.Empty);
     }
 
     private async Task HandleIncomingBasePacketAsync(PacketAsync packetAsync)
@@ -188,6 +192,7 @@ public class GameClientAsync
                         break;
                 }
             }
+
         }
     }
 
@@ -201,16 +206,11 @@ public class GameClientAsync
         var exist = await _redis.GetAsync<int>(session.SessionId);
 
         _logger.LogInformation("Found user id: {userId}", exist);
+        _clientUserId = exist;
     }
 
     private async void PingTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
     {
-        if (_tokenSource.IsCancellationRequested)
-        {
-            _pingTimer.Dispose();
-            return;
-        }
-
         _logger.LogDebug("Client #{@_clientId} is ready to PING", _clientId);
         //await SendDataPacket(OpCodes.OPCODE_DATA_PING, new byte[0]);
         _logger.LogDebug("Client #{@_clientId} has finished pinging", _clientId);

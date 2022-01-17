@@ -1,6 +1,7 @@
 ﻿
 using Common.Entities;
 using Database;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using NovumLobbyServer;
 using NovumLobbyServer.Services;
@@ -35,4 +36,15 @@ var host = Host.CreateDefaultBuilder(args)
         logging.AddConsole();
     }); ;
 
- await host.RunConsoleAsync();
+var built = host.Build();
+InitializeDatabase(built);
+
+await built.RunAsync();
+
+static void InitializeDatabase(IHost app)
+{
+    using var scope = app.Services.GetService<IServiceScopeFactory>()?.CreateScope();
+
+    using var ctx = scope?.ServiceProvider.GetRequiredService<DBContext>();
+    ctx?.Database.Migrate();
+}
