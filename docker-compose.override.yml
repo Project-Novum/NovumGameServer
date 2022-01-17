@@ -1,0 +1,14 @@
+version: '3.4'
+
+# services:
+#   novumlobbyserver:
+#     image: ${DOCKER_REGISTRY-}novumlobbyserver
+#     networks:
+#       - database
+#     depends_on:
+#       - postgres.server
+#     build:
+#       context: .
+#       dockerfile: NovumLobbyServer/Dockerfile
+#     ports:
+#         - 54994:54994

@@ -1,0 +1,50 @@
+version: '3.4'
+
+x-common-postgres: &common
+  ConnectionStrings__DefaultConnection: "User ID=postgres;Password=Thisis4testing!;Database=ffxiv;Server=postgres.server;port=5432;Include Error Detail=true"
+  RedisConfiguration__ConnectionString: redis.server:6379
+  RedisConfiguration__AllowAdmin: "true"
+
+services:
+  novumlogin:
+    image: ghcr.io/project-novum/novumloginserver/novumlogin:latest
+    environment:
+        <<: *common
+    ports:
+        - 8081:80
+    networks:
+      - database
+    depends_on:
+      - postgres.server
+      - redis.server
+
+  postgres.server:
+    image: postgres:alpine
+    networks:
+      - database
+    restart: unless-stopped
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:  
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=Thisis4testing!
+      - POSTGRES_DB=ffxiv
+    ports:
+      - 5432:5432
+
+  redis.server:
+    image: redis:alpine
+    networks:
+      - database
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    ports:
+      - 6379:6379
+
+networks:
+  database:
+
+volumes:
+  postgres-data:
+  redis-data:

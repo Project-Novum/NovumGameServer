@@ -5,6 +5,8 @@ using Microsoft.EntityFrameworkCore;
 using NovumLobbyServer;
 using NovumLobbyServer.Services;
 using NovumLobbyServer.Services.Interface;
+using StackExchange.Redis.Extensions.Core.Configuration;
+using StackExchange.Redis.Extensions.Newtonsoft;
 
 var host = Host.CreateDefaultBuilder(args)
     .ConfigureAppConfiguration(x =>
@@ -16,10 +18,13 @@ var host = Host.CreateDefaultBuilder(args)
     })
     .ConfigureServices((hostingContext, services) =>
     {
+        services.AddStackExchangeRedisExtensions<NewtonsoftSerializer>(
+            hostingContext.Configuration.GetSection(nameof(RedisConfiguration)).Get<RedisConfiguration>());
+
         services.AddSingleton<IClientProviderService, ClientProviderService>()
             .AddSingleton<IClientConnectionService, ClientConnectionService>()
             .AddDbContextPool<DBContext>(x => 
-                x.UseMySQL(hostingContext.Configuration.GetConnectionString("DefaultConnection")))
+                x.UseNpgsql(hostingContext.Configuration.GetConnectionString("DefaultConnection")))
             .AddTransient<PacketAsync>()
             .AddTransient<SubPacket>()
             .AddTransient<GamePacket>()

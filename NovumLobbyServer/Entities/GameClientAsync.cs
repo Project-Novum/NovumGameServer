@@ -8,6 +8,7 @@ using Common.Enumerations;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NovumLobbyServer.Packets.Receive;
+using StackExchange.Redis.Extensions.Core.Abstractions;
 
 
 namespace NovumLobbyServer.Entities;
@@ -15,14 +16,14 @@ namespace NovumLobbyServer.Entities;
 public class GameClientAsync
 {
     private readonly ILogger<GameClientAsync> _logger;
-    private readonly TimeSpan DefaultPingTimeout;
+    private readonly TimeSpan _defaultPingTimeout;
     private readonly IServiceProvider _provider;
-
+    private readonly IRedisDatabase _redis;
     private CancellationTokenSource _tokenSource;
     private System.Timers.Timer _pingTimer;
 
     private uint _clientId;
-
+    private string _clientSessionId;
 
     private NetworkStream _networkStream;
     private TcpClient _tcpClient;
@@ -45,12 +46,13 @@ public class GameClientAsync
 
     #endregion
 
-    public GameClientAsync(ILogger<GameClientAsync> logger, IServiceProvider provider)
+    public GameClientAsync(ILogger<GameClientAsync> logger, IServiceProvider provider, IRedisDatabase redis)
     {
         _logger = logger;
         _provider = provider;
+        _redis = redis;
         double pingTime = 5000;
-        DefaultPingTimeout = TimeSpan.FromMilliseconds(pingTime);
+        _defaultPingTimeout = TimeSpan.FromMilliseconds(pingTime);
     }
 
     /// <summary>
@@ -71,7 +73,7 @@ public class GameClientAsync
         _logger.LogTrace("Client #{@clientId} is connecting from {@_ipEndPoint}", clientId, _ipEndPoint);
         Task.Run(async () => await InternalConnectionLoop(_tokenSource.Token));
 
-        _pingTimer = new System.Timers.Timer(DefaultPingTimeout.TotalMilliseconds)
+        _pingTimer = new System.Timers.Timer(_defaultPingTimeout.TotalMilliseconds)
         {
             AutoReset = true,
             Enabled = true
@@ -193,6 +195,12 @@ public class GameClientAsync
     {
         SessionPacket session = new SessionPacket(packet);
         _logger.LogInformation(session.ToString());
+
+        _clientSessionId = session.SessionId;
+
+        var exist = await _redis.GetAsync<int>(session.SessionId);
+
+        _logger.LogInformation("Found user id: {userId}", exist);
     }
 
     private async void PingTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
@@ -210,13 +218,12 @@ public class GameClientAsync
 
     private async Task SendPacket(PacketAsync packetAsync)
     {
-        using MemoryStream responseStream = new MemoryStream();
+        await using MemoryStream responseStream = new MemoryStream();
         
         responseStream.Write(packetAsync.Header,0,0x10);
         responseStream.Write(packetAsync.Data,0,packetAsync.PacketSizeWithoutHeader);
 
         await _networkStream.WriteAsync(responseStream.ToArray(), 0, (int)responseStream.Length);
-
     }
 
     private byte[] GenerateBlowFishKey(PacketAsync packetAsync)
@@ -229,28 +236,24 @@ public class GameClientAsync
         uint clientNumber = binaryReader.ReadUInt32();
         
         byte[] key;
-        using (MemoryStream memStream = new MemoryStream(0x2C))
-        {
-            using (BinaryWriter binWriter = new BinaryWriter(memStream))
-            {
-                binWriter.Write((Byte)0x78);
-                binWriter.Write((Byte)0x56);
-                binWriter.Write((Byte)0x34);
-                binWriter.Write((Byte)0x12);
-                binWriter.Write((UInt32)clientNumber);
-                binWriter.Write((Byte)0xE8);
-                binWriter.Write((Byte)0x03);
-                binWriter.Write((Byte)0x00);
-                binWriter.Write((Byte)0x00);
-                binWriter.Write(Encoding.ASCII.GetBytes(ticketPhrase), 0, Encoding.ASCII.GetByteCount(ticketPhrase) >= 0x20 ? 0x20 : Encoding.ASCII.GetByteCount(ticketPhrase));                    
-            }
-            byte[] nonMD5edKey = memStream.GetBuffer();
+        using MemoryStream memStream = new MemoryStream(0x2C);
+        using BinaryWriter binWriter = new BinaryWriter(memStream);
 
-            using (MD5 md5Hash = MD5.Create())
-            {
-                key = md5Hash.ComputeHash(nonMD5edKey);
-            }
-        }
+        binWriter.Write((byte)0x78);
+        binWriter.Write((byte)0x56);
+        binWriter.Write((byte)0x34);
+        binWriter.Write((byte)0x12);
+        binWriter.Write(clientNumber);
+        binWriter.Write((byte)0xE8);
+        binWriter.Write((byte)0x03);
+        binWriter.Write((byte)0x00);
+        binWriter.Write((byte)0x00);
+        binWriter.Write(Encoding.ASCII.GetBytes(ticketPhrase), 0, Encoding.ASCII.GetByteCount(ticketPhrase) >= 0x20 ? 0x20 : Encoding.ASCII.GetByteCount(ticketPhrase));
+        byte[] nonMd5EdKey = memStream.GetBuffer();
+
+        using MD5 md5Hash = MD5.Create();
+        key = md5Hash.ComputeHash(nonMd5EdKey);
+
         return key;
 
     }
