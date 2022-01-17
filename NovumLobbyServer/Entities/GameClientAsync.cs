@@ -155,11 +155,6 @@ public class GameClientAsync
         _logger.LogTrace("Client #{@_clientId} has been closed safely", _clientId);
         _tcpClient.Close();
         _pingTimer.Stop();
-
-        // Delete the session from redis so it can't be reused
-        if(!string.IsNullOrEmpty(_clientSessionId))
-            await _redis.RemoveAsync(_clientSessionId);
-
         OnGameClientDisconnected?.Invoke(this, EventArgs.Empty);
     }
 
