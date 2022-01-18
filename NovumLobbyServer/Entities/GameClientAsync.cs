@@ -285,18 +285,21 @@ public class GameClientAsync
 
     private async Task SendCharacterList()
     {
-        CharacterListPacket characterListPacket = new (null!);
+        List<Character> userCharactersList = _dbContext.Characters.Where(c => c.UserId == _clientUserId).ToList();
+        CharacterListPacket characterListPacket = ActivatorUtilities.CreateInstance<CharacterListPacket>(_provider);
+        List<SubPacket> subPackets = characterListPacket.BuildPacket(0, userCharactersList);
         
-        SubPacket subPacket = ActivatorUtilities.CreateInstance<SubPacket>(_provider);
-        if (subPacket.Create(characterListPacket))
-        {
-            PacketAsync response = ActivatorUtilities.CreateInstance<PacketAsync>(_provider);
-            response.SubPacketList.Add(subPacket);
-            response.BuildPacket(true, false);
-            response.EncryptPacket(_blowfish);
-            _logger.LogInformation("Sending Character List {0}",characterListPacket.ToString());
-            await SendPacket(response);
-        }
+        PacketAsync response = ActivatorUtilities.CreateInstance<PacketAsync>(_provider);
+        response.SubPacketList = subPackets;
+        response.BuildPacket(true, false);
+        response.EncryptPacket(_blowfish);
+        _logger.LogInformation("Sending Character List {0}",characterListPacket.ToString());
+        await SendPacket(response);
+        
+        
+        
+            
+        
     }
 
     private async void PingTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)

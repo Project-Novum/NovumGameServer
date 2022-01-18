@@ -21,7 +21,7 @@ public class ReservedNamesPacket : GamePacket
 
     public override byte[] Create()
     {
-        using MemoryStream memoryStream = new(); 
+        using MemoryStream memoryStream = new(0x210); 
         
         if (_namesList.Count == 0)
         {
@@ -34,7 +34,7 @@ public class ReservedNamesPacket : GamePacket
             memoryStream.Write(BitConverter.GetBytes(UInt16.MinValue));
         }
 
-        return memoryStream.ToArray();
+        return memoryStream.GetBuffer();
     }
 
     public override uint SourceId() => 0xe0006868;

@@ -27,7 +27,7 @@ public class RetainerListPacket : GamePacket
         int retainerCount = 0;
         int totalCount = 0;
         
-        using MemoryStream memoryStream = new ();
+        using MemoryStream memoryStream = new (0x210);
 
         if (_retainerList.Count == 0)
         {
@@ -40,7 +40,7 @@ public class RetainerListPacket : GamePacket
             memoryStream.Write(BitConverter.GetBytes(UInt16.MinValue));
         }
 
-        return memoryStream.ToArray();
+        return memoryStream.GetBuffer();
     }
 
     public override uint SourceId() => 0xe0006868;

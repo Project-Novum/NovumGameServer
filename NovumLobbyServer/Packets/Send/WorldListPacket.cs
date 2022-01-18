@@ -27,7 +27,7 @@ public class WorldListPacket : GamePacket
         int serverCount = 0;
         int totalCount = 0;
 
-        using MemoryStream memoryStream = new ();
+        using MemoryStream memoryStream = new (0x210);
         foreach (var world in _gameWorlds)
         {
             if (totalCount == 0 || serverCount % Maxperpacket == 0)
@@ -55,7 +55,7 @@ public class WorldListPacket : GamePacket
             totalCount++;
         }
 
-        return memoryStream.ToArray();
+        return memoryStream.GetBuffer();
     }
 
     public override uint SourceId() => 0xe0006868;
