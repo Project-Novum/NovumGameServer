@@ -7,8 +7,12 @@ using System.Text;
 using Common;
 using Common.Entities;
 using Common.Enumerations;
+using Database;
+using Database.Models;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.VisualBasic;
 using NovumLobbyServer.Packets.Receive;
 using NovumLobbyServer.Packets.Send;
 using StackExchange.Redis.Extensions.Core.Abstractions;
@@ -22,6 +26,7 @@ public class GameClientAsync
     private readonly TimeSpan _defaultPingTimeout;
     private readonly IServiceProvider _provider;
     private readonly IRedisDatabase _redis;
+    private readonly DBContext _dbContext;
     private System.Timers.Timer _pingTimer;
 
     private uint _clientId;
@@ -49,11 +54,12 @@ public class GameClientAsync
 
     #endregion
 
-    public GameClientAsync(ILogger<GameClientAsync> logger, IServiceProvider provider, IRedisDatabase redis)
+    public GameClientAsync(ILogger<GameClientAsync> logger, IServiceProvider provider, IRedisDatabase redis , DBContext dbContext)
     {
         _logger = logger;
         _provider = provider;
         _redis = redis;
+        _dbContext = dbContext;
         double pingTime = 5000;
         _defaultPingTimeout = TimeSpan.FromMilliseconds(pingTime);
     }
@@ -183,27 +189,19 @@ public class GameClientAsync
             {
                 switch (packet.GamePacketAsync.Opcode)
                 {
+                    case 0x03:
+                        await SendWorldList();
+                        await SendReservedNamesList();
+                        await SendRetainerList();
+                        await SendCharacterList();
+                        break;
                     case 0x05:
                         await ProcessSessionAcknowledgement(packet);
                         break;
                 }
             }
 
-            /*if (packet.Type == SubPacketType.ZONE_PACKET2)
-            {
-                
-                PongPacket pongPacket = new PongPacket();
-                SubPacket subPacket = ActivatorUtilities.CreateInstance<SubPacket>(_provider);
-                if (subPacket.Create(0x0008,0,pongPacket))
-                {
-                    PacketAsync response = ActivatorUtilities.CreateInstance<PacketAsync>(_provider);
-                    response.SubPacketList.Add(subPacket);
-                    response.BuildPacket(true, false);
-                    //response.EncryptPacket(_blowfish);
-                    _logger.LogInformation("Sending PONG {0}",pongPacket.ToString());
-                    await SendPacket(response);
-                }
-            }*/
+            
 
         }
     }
@@ -233,12 +231,82 @@ public class GameClientAsync
         }
     }
 
+
+    private async Task SendWorldList()
+    {
+        List<GameWorld> gameWorlds = _dbContext.GameWorlds.ToList();
+        WorldListPacket worldListPacket = new WorldListPacket(0, gameWorlds);
+        SubPacket subPacket = ActivatorUtilities.CreateInstance<SubPacket>(_provider);
+        if (subPacket.Create(worldListPacket))
+        {
+            PacketAsync response = ActivatorUtilities.CreateInstance<PacketAsync>(_provider);
+            response.SubPacketList.Add(subPacket);
+            response.BuildPacket(true, false);
+            response.EncryptPacket(_blowfish);
+            _logger.LogInformation("Sending World List {0}",worldListPacket.ToString());
+            await SendPacket(response);
+        }
+        
+    }
+
+    private async Task SendReservedNamesList()
+    {
+        List<string> names = new List<string>();
+        ReservedNamesPacket reservedNamesPacket = new ReservedNamesPacket(0, names);
+        SubPacket subPacket = ActivatorUtilities.CreateInstance<SubPacket>(_provider);
+        if (subPacket.Create(reservedNamesPacket))
+        {
+            PacketAsync response = ActivatorUtilities.CreateInstance<PacketAsync>(_provider);
+            response.SubPacketList.Add(subPacket);
+            response.BuildPacket(true, false);
+            response.EncryptPacket(_blowfish);
+            _logger.LogInformation("Sending Reserved Names List {0}",reservedNamesPacket.ToString());
+            await SendPacket(response);
+        }
+        
+    }
+
+    private async Task SendRetainerList()
+    {
+        List<Retainer> retainers = new List<Retainer>();
+        RetainerListPacket retainerListPacket = new RetainerListPacket(0, retainers);
+        
+        SubPacket subPacket = ActivatorUtilities.CreateInstance<SubPacket>(_provider);
+        if (subPacket.Create(retainerListPacket))
+        {
+            PacketAsync response = ActivatorUtilities.CreateInstance<PacketAsync>(_provider);
+            response.SubPacketList.Add(subPacket);
+            response.BuildPacket(true, false);
+            response.EncryptPacket(_blowfish);
+            _logger.LogInformation("Sending Retainers List {0}",retainerListPacket.ToString());
+            await SendPacket(response);
+        }
+    }
+
+    private async Task SendCharacterList()
+    {
+        CharacterListPacket characterListPacket = new (null!);
+        
+        SubPacket subPacket = ActivatorUtilities.CreateInstance<SubPacket>(_provider);
+        if (subPacket.Create(characterListPacket))
+        {
+            PacketAsync response = ActivatorUtilities.CreateInstance<PacketAsync>(_provider);
+            response.SubPacketList.Add(subPacket);
+            response.BuildPacket(true, false);
+            response.EncryptPacket(_blowfish);
+            _logger.LogInformation("Sending Character List {0}",characterListPacket.ToString());
+            await SendPacket(response);
+        }
+    }
+
     private async void PingTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
     {
         _logger.LogDebug("Client #{@_clientId} is ready to PING", _clientId);
         //await SendDataPacket(OpCodes.OPCODE_DATA_PING, new byte[0]);
         _logger.LogDebug("Client #{@_clientId} has finished pinging", _clientId);
     }
+    
+    
 
     private async Task SendPacket(PacketAsync packetAsync)
     {
