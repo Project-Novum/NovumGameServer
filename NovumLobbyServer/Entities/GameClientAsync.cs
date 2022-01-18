@@ -189,6 +189,22 @@ public class GameClientAsync
                 }
             }
 
+            /*if (packet.Type == SubPacketType.ZONE_PACKET2)
+            {
+                
+                PongPacket pongPacket = new PongPacket();
+                SubPacket subPacket = ActivatorUtilities.CreateInstance<SubPacket>(_provider);
+                if (subPacket.Create(0x0008,0,pongPacket))
+                {
+                    PacketAsync response = ActivatorUtilities.CreateInstance<PacketAsync>(_provider);
+                    response.SubPacketList.Add(subPacket);
+                    response.BuildPacket(true, false);
+                    //response.EncryptPacket(_blowfish);
+                    _logger.LogInformation("Sending PONG {0}",pongPacket.ToString());
+                    await SendPacket(response);
+                }
+            }*/
+
         }
     }
 
@@ -240,7 +256,7 @@ public class GameClientAsync
         using MemoryStream memoryStream = new MemoryStream(packetAsync.Data);
         using BinaryReader binaryReader = new BinaryReader(memoryStream);
         binaryReader.BaseStream.Seek(0x34, SeekOrigin.Begin);
-        byte[] buff = new byte[0x40];
+        //byte[] buff = new byte[0x40];
         string ticketPhrase =  Encoding.ASCII.GetString(binaryReader.ReadBytes(0x40)).Trim(new[] { '\0' });
         uint clientNumber = binaryReader.ReadUInt32();
         

@@ -141,6 +141,8 @@ public class PacketAsync
             subPacketData.Write(subPacket.Header);
             subPacketData.Write(subPacket.Data);
         }
+
+        _packetSizeWithoutHeader = (ushort)(_packetSize -  0x10);
         
         using MemoryStream memoryStream = new MemoryStream(); 
         memoryStream.Write(BitConverter.GetBytes(_isAuthenticated));
@@ -150,7 +152,9 @@ public class PacketAsync
         memoryStream.Write(BitConverter.GetBytes(_numberOfSubPackets));
         memoryStream.Write(BitConverter.GetBytes(_timestamp));
         memoryStream.Write(subPacketData.ToArray());
-        _data = memoryStream.ToArray();
+        
+        _header = memoryStream.ToArray();
+        _data = subPacketData.ToArray();
 
         return true;
     }

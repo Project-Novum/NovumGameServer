@@ -27,10 +27,12 @@ public class SubPacket
 
     }
 
+    
     public bool Create(GamePacket gamePacket)
     {
         return Create((ushort)SubPacketType.GAME_PACKET, gamePacket.SourceId(), gamePacket.TargetId(), gamePacket.Create(),gamePacket.OpCode());
     }
+    
 
     public bool Create(ushort PacketType, uint SourceId, Packet packet)
     {
@@ -40,7 +42,7 @@ public class SubPacket
 
     public bool Create(ushort PacketType, uint SourceId,uint TargetId ,byte[] data,ushort Opcode)
     {
-        using MemoryStream memoryStream = new MemoryStream();
+        using MemoryStream memoryStream = new ();
         
         if (PacketType == (ushort)SubPacketType.GAME_PACKET)
         {
@@ -48,7 +50,7 @@ public class SubPacket
             _gamePacketAsync.Unk1 = 0x14;
             _gamePacketAsync.Opcode = Opcode;
             _gamePacketAsync.Unk2 = UInt32.MinValue;
-            _gamePacketAsync.Timestamp = (uint)DateTimeOffset.Now.ToUnixTimeSeconds();
+            _gamePacketAsync.Timestamp = Utils.UnixTimeStampUTC();
             _gamePacketAsync.Unk3 = UInt32.MinValue;
             _gamePacketAsync.BuildHeader();
             memoryStream.Write(_gamePacketAsync.Header);
@@ -63,13 +65,13 @@ public class SubPacket
 
         
         _packetSize = (ushort)(0x10 + _data.Length);
-        _packetSizeWithoutHeader = (ushort)(_packetSize - 0x10);
+        _packetSizeWithoutHeader = (ushort)(_data.Length);
 
-        if (PacketType == (ushort)SubPacketType.GAME_PACKET)
+        /*if (PacketType == (ushort)SubPacketType.GAME_PACKET)
         {
             _packetSize += 0x10;
             _packetSizeWithoutHeader += 0x10;
-        }
+        }*/
 
         using MemoryStream headerStream = new MemoryStream();
         headerStream.Write(BitConverter.GetBytes(_packetSize));
@@ -79,7 +81,6 @@ public class SubPacket
         headerStream.Write(BitConverter.GetBytes(_unknown));
         _header = headerStream.ToArray();
         
-
         return true;
     }
 
